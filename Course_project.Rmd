@@ -1,0 +1,96 @@
+---
+title: 'Practical Machine Learning: Course Project'
+author: "Anton Sinev"
+date: '6 January 2018 г '
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Introduction
+
+The goal of the project is to predict the manner in which diferent people did the exercise. There are 5 manners: "A","B","C","D" and "E" (variable "classe"). I used methods taken from "caret" package.
+
+```{r, message = FALSE}
+library(caret)
+library(psych) # trace
+```
+
+### Data processing
+
+First of all I downloaded required data using temporary files. Preliminary investigation (its results are not illustrated here because they would be quite large and cover all columns) has shown that some columns have NAs or empty values. These values were defined as NAs on the reading stage.
+
+```{r}
+trainingFile <- tempfile()
+testingFile <- tempfile()
+
+trainingFileURL <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testingFileURL <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+download.file(trainingFileURL, trainingFile)
+download.file(testingFileURL, testingFile)
+
+trainingData <- read.csv(trainingFile, na.strings = c("NA",""))
+testingData <- read.csv(testingFile, na.strings = c("NA",""))
+
+unlink(trainingFile)
+unlink(testingFile)
+```
+
+After that I excluded all columns containing NAs because, I think, it is not possible to define 1-1 correspondence using columns with NAs. Also, as I understood, columns 1-5 are not connected with the problem (at least they cannot be used to calculate "classe" variable value), so I removed them too.
+
+```{r}
+colFilter <- (apply(testingData,2,anyNA) | apply(trainingData,2,anyNA))
+testingProcData <- testingData[,!colFilter]
+trainingProcData <- trainingData[,!colFilter]
+testingProcData <- testingProcData[,-c(1:5)]
+trainingProcData <- trainingProcData[,-c(1:5)]
+```
+
+### Model fitting
+
+First of all, to build an accurate model, I separated original dataset by the two ones: training (75%) and testing (25%). It should be noticed, that the dataset originally named as "testing" and stored in "testingProcData" dataset, does not participate in this. 
+
+```{r}
+set.seed(19)
+inTrain <- createDataPartition(y = trainingProcData$classe, p=0.75, list=FALSE)
+training <- trainingProcData[inTrain,]
+testing <- trainingProcData[-inTrain,]
+```
+
+To predict the "classe" value I used random forest method. This method is often applied to classification problem and relatively accurate. Its disadvantage is time-consumingness. Than is why I ran the code below only one (it took more than 2 hours). I used cross-validation method to define optimal number of variables (finally it is 28, see "fit" below). Window size for cross-validation test was selected as 10 folds.
+
+```{r, eval = FALSE}
+fit <- train(classe ~., method="rf", data=training, trControl=trainControl(method="cv", number = 10), allowParallel=TRUE, importance=TRUE )
+```
+
+When I compiled this HTML file, I did'n run this part of code. Instead of this I loaded pre-calculated data and displayed the final result of calculation. 
+
+```{r}
+load("Data.RData")
+fit
+```
+
+It is seen that the model accuracy is larger than 99.7% (for 28 variables), which is very accurate. After that I assessed out of sample performance, the confusion matrix is presented below. 
+
+```{r}
+testingPredict <- predict(fit,testing)
+confMatrix <- confusionMatrix(testing$classe, testingPredict)
+confMatrix$table
+accuracyOOS <- tr(confMatrix$table)/nrow(testing)
+```
+
+It is seen that the model is very accurate for out of sample testing. It aloso should be noted that its accuracy (`r accuracyOOS`) is slightly larger than in sample test accuracy (but in general, they are close). It exceeded our expectations: usually out of sample error is larger than in sample one. It the differece was significant, it would mean that there is an overfitting in the in training sample. In this case it would be reasonable to consider another models or parameters of the current model (e.g. reduce the number of variables).In the current case I don't see any reasons for further investigation.  
+
+### Results for the testing dataset (20 lines dataframe)
+
+The model output for the set named "testing" initially and containing only 20 lines is provided below. 
+
+```{r}
+testingPredict2 <- predict(fit, testingProcData)
+testingPredict2
+```
+
+
